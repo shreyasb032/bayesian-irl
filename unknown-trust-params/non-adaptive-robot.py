@@ -284,7 +284,7 @@ def main(args: argparse.Namespace):
     data_all['performance actual'] = np.zeros((num_simulations, num_missions, N), dtype=int)
 
     for i in tqdm(range(num_simulations)):
-        data_one_simulation = run_one_simulation(args)
+        data_one_simulation = run_one_simulation(args, i * num_missions)
         for k, v in data_one_simulation.items():
             # print(k)
             data_all[k][i] = v
