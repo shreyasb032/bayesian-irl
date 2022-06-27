@@ -6,7 +6,7 @@ from numpy.random import beta as beta_sampler
 
 class Estimator:
 
-    def __init__(self, num_iterations = 1000, stepsize = 0.0001, use_prior=False, query_feedback_at=None, error_tol=0.01):
+    def __init__(self, num_iterations = 1000, stepsize = 0.0001, use_prior=True, query_feedback_at=None, error_tol=0.01):
         self.MAX_ITER = num_iterations
         self.stepsize = stepsize
         self.definePrior()
@@ -52,17 +52,10 @@ class Estimator:
     
         self.prior = prior
 
-    def getInitialGuess(self, p, t):
+    def getInitialGuess(self, feedback):
 
-        t = round(t * 10) / 10
+        t = round(feedback * 10) / 10
         guess_params = self.gp_list[t].copy()
-
-        if p == 1:
-            guess_params[0] -= guess_params[2]
-            guess_params[0] = max(0, guess_params[0])
-        else:
-            guess_params[1] -= guess_params[3]
-            guess_params[1] = max(0, guess_params[1])
 
         return guess_params
 
@@ -80,7 +73,7 @@ class Estimator:
         curr_house = len(self.performance)
         lr = np.array([factor, factor, factor/curr_house, factor/curr_house])
 
-        guess_params = initial_guess             # To keep using current parameters as the initial guess
+        guess_params = initial_guess.copy()                                  # To keep using current parameters as the initial guess
         # guess_params = self.getInitialGuess(performance[0], feedback[0])   # To use a new initial guess every time
 
         if self.query_feedback_at is not None:

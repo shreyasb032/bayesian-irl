@@ -1,29 +1,33 @@
-"""Here, the robot's and the human's weights are matched a-priori. The robot does not know these weights and tries to estimate them.
+"""Here, the robot tries to estimate the human's weights but only uses them for performance computation for the trust update.
+The weights of the objective function of the robot are fixed. 
 Further, the true trust parameters of the human are known a priori. So, they are not updated via feedback"""
 
 import numpy as np
+import _context
 from classes.POMDPSolver import Solver
 from classes.HumanModels import BoundedRational
 from classes.IRLModel import Posterior
 from classes.ThreatSetter import ThreatSetter
 from classes.RewardFunctions import Affine
-import matplotlib.pyplot as plt
 import os
 import argparse
-from tqdm import tqdm
-import time
 import pickle
+import time
+from tqdm import tqdm
 
 def run_one_simulation(args: argparse.Namespace):
-    
+
+    # Output data: Trust feedback, trust estimation, posterior distribution, weights, healths, times, recommendations, actions
     data = {}
-    
+
     ############################################# PARAMETERS THAT CAN BE MODIFIED ##################################################
+    wh_rob = args.health_weight_robot           # Fixed health weight of the robot
     wt_rob = args.trust_weight                  # Trust increase reward weight
     kappa = args.kappa                          # Assumed rationality coefficient in the bounded rationality model
-    wh = args.health_weight                     # Shared health weight. time weight = 1 - health weight
+    stepsize = args.posterior_stepsize                    # stepsize in the posterior
+    wh_hum = args.health_weight_human           # True health weight of the human. time weight = 1 - health weight
     trust_params = args.trust_params            # Human's true trust parameters in the beta distribution model [alpha_0, beta_0, ws, wf]. These are known by the robot
-    directory = "./figures/Bounded Rationality/fixed-trust-params/a-priori-alignment/kappa" + str(kappa) + "/" + str(wh) # Storage directory for the plots
+    directory = "./figures/Bounded Rationality/fixed-trust-params/non-adaptive-learner/kappa" + str(kappa) + "/" + str(wh_hum) # Storage directory for the plots
     N = args.num_sites                          # Number of sites in a mission (Horizon for planning)
     num_missions = args.num_missions            # Number of "missions" of N sites each
     region_size = args.region_size              # Region is a group of houses with a specific value of prior threat probability
@@ -31,9 +35,6 @@ def run_one_simulation(args: argparse.Namespace):
     # Reward function
     max_health = 110 # The constant in the affine reward function
     reward_fun = Affine(max_health=max_health)
-
-    # Posterior
-    stepsize = args.posterior_stepsize
 
     # Flags for controlling the resets in between missions
     RESET_SOLVER = args.reset_solver
@@ -44,8 +45,7 @@ def run_one_simulation(args: argparse.Namespace):
     STORE_FIGS = args.store_figs     # Flag to decide whether to save the trust and posterior plots
     PRINT_FLAG = args.print_flag     # Flag to decide whether to print the data to the console output
     #################################################################################################################################
-    
-    wh_rob = wh           
+
     wc_rob = 1 - wh_rob
     est_human_weights = {'health': None, 'time': None}
     rob_weights = {'health': wh_rob, 'time': wc_rob, 'trust': wt_rob}
@@ -55,9 +55,8 @@ def run_one_simulation(args: argparse.Namespace):
     posterior = Posterior(kappa=kappa, stepsize=stepsize, reward_fun=reward_fun)
 
     # Initialize human model
-    wh_hum = wh
-    wc_hum = 1-wh
-    human_weights = {"health": wh_hum, "time": wc_hum}
+    wc_hum = 1-wh_hum
+    human_weights = {"health":wh_hum, "time": wc_hum}
     human = BoundedRational(trust_params, human_weights, reward_fun=reward_fun, kappa=1.0)
     
     if STORE_FIGS and not os.path.exists(directory):
@@ -86,32 +85,36 @@ def run_one_simulation(args: argparse.Namespace):
     wh_means = np.zeros((num_missions, N+1), dtype=float)
     wh_map = np.zeros((num_missions, N+1), dtype=float)
     wh_map_prob = np.zeros((num_missions, N+1), dtype=float)
-    
+
     # Initialize health and time
     health = 100
     current_time = 0
 
     for j in range(num_missions):
 
-        # For printing purposes
-        table_data = [['prior', 'after_scan', 'rec', 'action', 'health', 'time', 'trust-fb', 'trust-est', 'perf-hum', 'perf-rob', 'wh-mean', 'wh-map']]
+        if PRINT_FLAG:
+            # For printing purposes
+            table_data = [['prior', 'after_scan', 'rec', 'action', 'health', 'time', 'trust-fb', 'trust-est', 'perf-hum', 'perf-rob', 'wh-mean', 'wh-map']]
 
         # Initialize threats
         # rng = np.random.default_rng(seed=j)
         rng = np.random.default_rng()
         priors = rng.random(N // region_size)
-        # threat_setter = ThreatSetter(N, region_size, priors=priors, seed=j)
         threat_setter = ThreatSetter(N, region_size, priors=priors)
+        # threat_setter = ThreatSetter(N, region_size, priors=priors, seed=j)
         threat_setter.setThreats()
         priors = threat_setter.priors
         after_scan = threat_setter.after_scan
         prior_levels = np.zeros_like(after_scan)
-
         for i in range(threat_setter.num_regions):
             prior_levels[i*threat_setter.region_size:(i+1)*threat_setter.region_size] = priors[i]
-
         threats = threat_setter.threats
         solver.update_danger(threats, prior_levels, after_scan, reset=False)
+
+        # Store threat infos
+        prior_levels_storage[j, :] = prior_levels.copy()
+        after_scan_storage[j, :] = after_scan.copy()
+        threats_storage[j, :] = threats.copy()
 
         # Reset the solver to remove old performance history. But, we would need new parameters
         if RESET_SOLVER:
@@ -135,7 +138,7 @@ def run_one_simulation(args: argparse.Namespace):
             # Update health, time
             time_old = current_time
             health_old = health
-            
+
             if action:
                 current_time += 10.
             else:
@@ -154,12 +157,13 @@ def run_one_simulation(args: argparse.Namespace):
             wh_map[j, i] = weight
             wh_map_prob[j, i] = prob
             posterior.update(rec, action, human.get_mean(), health_old, time_old, after_scan[i])
+            posterior_dists[j, i, :] = posterior.dist
 
             # Use the old values of health and time to compute the performance
             trust_est_old = solver.get_trust_estimate()
             trust_estimate[j, i] = trust_est_old
             solver.forward(i, rec, health_old, time_old, posterior)
-            
+
             # Update trust (based on old values of health and time)
             trust_feedback[j, i] = human.get_feedback()
             human.update_trust(rec, threats[i], health_old, time_old)
@@ -187,16 +191,14 @@ def run_one_simulation(args: argparse.Namespace):
                 row.append(str(solver.get_last_performance()))
                 row.append("{:.2f}".format(posterior.get_mean()))
                 row.append("{:.2f}".format(posterior.get_map()[1]))
-                table_data.append(row)        
-        
+                table_data.append(row)
+
         if PRINT_FLAG:
             # Get the values after the last site
             row = ['', '', '', '', str(health), str(current_time), "{:.2f}".format(human.get_mean()), "{:.2f}".format(solver.get_trust_estimate()), str(human.get_last_performance()), str(solver.get_last_performance()), "{:.2f}".format(posterior.get_mean()), "{:.2f}".format(posterior.get_map()[1])]
             table_data.append(row)
-
             # Print
             col_print(table_data)
-            posterior_dists[j, :] = posterior.dist
         
         # Store the final values after the last house
         trust_feedback[j, -1] = human.get_feedback()
@@ -232,14 +234,15 @@ def run_one_simulation(args: argparse.Namespace):
 def main(args: argparse.Namespace):
 
     ############################################# PARAMETERS THAT CAN BE MODIFIED ##################################################
-    num_simulations = args.num_simulations
-    kappa = args.kappa                          # Assumed rationality coefficient in the bounded rationality model
-    wh = args.health_weight                     # Shared health weight. time weight = 1 - health weight
+    num_simulations = args.num_simulations      # Number of simulations to run
+    STORE_FIGS = args.store_figs                # Flag to decide whether to save the trust and posterior plots
     N = args.num_sites                          # Number of sites in a mission (Horizon for planning)
     num_missions = args.num_missions            # Number of "missions" of N sites each
     stepsize = args.posterior_stepsize          # Stepsize in the posterior distrbution over the weights
     num_weights = int(1/stepsize) + 1           # Number of weight samples in the posterior distribution
-    data_direc = "./data/Bounded Rationality/fixed-trust-params/a-priori-alignment/kappa" + str(kappa) + "/wh" + str(wh) # Storage directory for the plots
+    wh_hum = args.health_weight_human           # True health weight of the human. time weight = 1 - health weight
+    kappa = args.kappa                          # Assumed rationality coefficient in the bounded rationality model
+    data_direc = "./data/Bounded Rationality/fixed-trust-params/non-adaptive-learner/kappa" + str(kappa) + "/wh" + str(wh_hum) # Storage directory for the plots
     #################################################################################################################################
 
     data_all = {}
@@ -266,7 +269,7 @@ def main(args: argparse.Namespace):
         for k, v in data_one_simulation.items():
             # print(k)
             data_all[k][i] = v
-    
+
     ############################### STORING THE DATA #############################
     if not os.path.exists(data_direc):
         os.makedirs(data_direc)
@@ -276,8 +279,7 @@ def main(args: argparse.Namespace):
         pickle.dump(data_all, f)
 
     ################################ PLOTTING THE DATA ###########################
-
-    # 1. Trust
+    # # 1. Trust
     # fig, ax = plt.subplots()
     # ax.plot(trust_feedback[:, -1], linewidth=2, c='tab:blue', label='Feedback')
     # ax.plot(trust_estimate[:, -1], linewidth=2, c='tab:orange', label='Estimate')
@@ -286,7 +288,7 @@ def main(args: argparse.Namespace):
     # ax.set_ylabel("Trust", fontsize=14)
     # ax.set_ylim([-0.05, 1.05])
     # ax.legend()
-    
+
     # if STORE_FIGS:
     #     fig.savefig(directory + "/trust.png")
 
@@ -319,7 +321,8 @@ if __name__ == "__main__":
     parser= argparse.ArgumentParser(description='Adaptive solver that adapts its weights according to learnt human weights')
     parser.add_argument('--trust-weight', type=float, help='trust weight for the robot (default: 10.0)', default=10.0)
     parser.add_argument('--kappa', type=float, help='rationality coeffiecient (default: 0.05)', default=0.05)
-    parser.add_argument('--health-weight', type=float, help='shared health weight (default: 0.9)', default=0.9)
+    parser.add_argument('--health-weight-robot', type=float, help='Fixed health weight of the robot (default: 0.7)', default=0.7)
+    parser.add_argument('--health-weight-human', type=float, help='True health weight of the human (default: 0.9)', default=0.9)
     parser.add_argument('--trust-params', nargs=4, help='Trust parameters for the human, default=[90., 30., 20. 30.]', default=[90., 30., 20., 30.])
     parser.add_argument('--num-sites', type=int, help='Number of sites in a mission (default: 10)', default=10)
     parser.add_argument('--num-missions', type=int, help='Number of missions (default: 10)', default=10)
@@ -333,7 +336,4 @@ if __name__ == "__main__":
     parser.add_argument('--num-simulations', type=int, help='Number of simulations to run (default: 10000)', default=10000)
     parser.add_argument('--posterior-stepsize', type=float, help='Stepsize in the posterior distribution (default(0.05)', default=0.05)
 
-    args = parser.parse_args()
-
-    main(args)
-
+    main(parser.parse_args())

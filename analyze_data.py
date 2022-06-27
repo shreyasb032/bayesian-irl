@@ -23,6 +23,7 @@ def analyze(data: dict):
 
     num_simulations, num_missions, num_sites = data["actions"].shape
 
+    ########################### TRUST ##################################################
     fig, ax = plt.subplots()
 
     trust_feedback = data['trust feedback']
@@ -39,6 +40,16 @@ def analyze(data: dict):
 
     ax.legend()
     ax.set_ylim([-0.05, 1.05])
+
+
+    ########################################### POSTERIOR ###############################
+    fig, ax = plt.subplots()
+
+    posterior_dists = data['posterior']
+
+    mean = np.mean(posterior_dists, axis=0)
+    std = np.std(posterior_dists, axis=0)
+
 
     plt.show()
 
