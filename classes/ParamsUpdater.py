@@ -28,10 +28,10 @@ class Estimator:
         self.performance = []
         self.feedback =[]
         self.query_feedback_at = query_feedback_at
-    
+
     def reset(self):
-        self.performance = []
-        self.feedback = []
+        self.performance.clear()
+        self.feedback.clear()
 
     def definePrior(self):
     

@@ -14,7 +14,7 @@ from tqdm import tqdm
 import time
 import pickle
 
-def run_one_simulation(args: argparse.Namespace):
+def run_one_simulation(args: argparse.Namespace, seed: int):
     
     data = {}
     
@@ -23,7 +23,7 @@ def run_one_simulation(args: argparse.Namespace):
     kappa = args.kappa                          # Assumed rationality coefficient in the bounded rationality model
     wh = args.health_weight                     # Shared health weight. time weight = 1 - health weight
     trust_params = args.trust_params            # Human's true trust parameters in the beta distribution model [alpha_0, beta_0, ws, wf]. These are known by the robot
-    directory = "./figures/Bounded Rationality/fixed-trust-params/a-priori-alignment/kappa" + str(kappa) + "/" + str(wh) # Storage directory for the plots
+    directory = "./figures/Bounded-Rationality/fixed-trust-params/a-priori-alignment/kappa" + str(kappa) + "/" + str(wh) # Storage directory for the plots
     N = args.num_sites                          # Number of sites in a mission (Horizon for planning)
     num_missions = args.num_missions            # Number of "missions" of N sites each
     region_size = args.region_size              # Region is a group of houses with a specific value of prior threat probability
@@ -69,7 +69,6 @@ def run_one_simulation(args: argparse.Namespace):
     # N stuff
     recs = np.zeros((num_missions, N), dtype=int)
     acts = np.zeros((num_missions, N), dtype=int)
-    posterior_dists = np.zeros((num_missions, N, len(posterior.dist)), dtype=float)
     weights = posterior.weights.copy()
     prior_levels_storage = np.zeros((num_missions, N), dtype=float)
     after_scan_storage = np.zeros((num_missions, N), dtype=float)
@@ -86,6 +85,7 @@ def run_one_simulation(args: argparse.Namespace):
     wh_means = np.zeros((num_missions, N+1), dtype=float)
     wh_map = np.zeros((num_missions, N+1), dtype=float)
     wh_map_prob = np.zeros((num_missions, N+1), dtype=float)
+    posterior_dists = np.zeros((num_missions, N+1, len(posterior.dist)), dtype=float)
     
     # Initialize health and time
     health = 100
@@ -97,11 +97,9 @@ def run_one_simulation(args: argparse.Namespace):
         table_data = [['prior', 'after_scan', 'rec', 'action', 'health', 'time', 'trust-fb', 'trust-est', 'perf-hum', 'perf-rob', 'wh-mean', 'wh-map']]
 
         # Initialize threats
-        # rng = np.random.default_rng(seed=j)
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed=seed + j)
         priors = rng.random(N // region_size)
-        # threat_setter = ThreatSetter(N, region_size, priors=priors, seed=j)
-        threat_setter = ThreatSetter(N, region_size, priors=priors)
+        threat_setter = ThreatSetter(N, region_size, priors=priors, seed=seed+j)
         threat_setter.setThreats()
         priors = threat_setter.priors
         after_scan = threat_setter.after_scan
@@ -112,6 +110,11 @@ def run_one_simulation(args: argparse.Namespace):
 
         threats = threat_setter.threats
         solver.update_danger(threats, prior_levels, after_scan, reset=False)
+
+        # Store threats stuff
+        prior_levels_storage[j, :] = prior_levels
+        after_scan_storage[j, :] = after_scan
+        threats_storage[j, :] = threats
 
         # Reset the solver to remove old performance history. But, we would need new parameters
         if RESET_SOLVER:
@@ -153,8 +156,8 @@ def run_one_simulation(args: argparse.Namespace):
             prob, weight = posterior.get_map()
             wh_map[j, i] = weight
             wh_map_prob[j, i] = prob
-            posterior.update(rec, action, human.get_mean(), health_old, time_old, after_scan[i])
             posterior_dists[j, i, :] = posterior.dist
+            posterior.update(rec, action, human.get_mean(), health_old, time_old, after_scan[i])
 
             # Use the old values of health and time to compute the performance
             trust_est_old = solver.get_trust_estimate()
@@ -208,6 +211,7 @@ def run_one_simulation(args: argparse.Namespace):
         prob, weight = posterior.get_map()
         wh_map[j, -1] = weight
         wh_map_prob[j, -1] = prob
+        posterior_dists[j, -1, :] = posterior.dist
 
     data['trust feedback'] = trust_feedback
     data['trust estimate'] = trust_estimate
@@ -239,7 +243,7 @@ def main(args: argparse.Namespace):
     num_missions = args.num_missions            # Number of "missions" of N sites each
     stepsize = args.posterior_stepsize          # Stepsize in the posterior distrbution over the weights
     num_weights = int(1/stepsize) + 1           # Number of weight samples in the posterior distribution
-    data_direc = "./data/Bounded Rationality/fixed-trust-params/a-priori-alignment/kappa" + str(kappa) + "/wh" + str(wh) # Storage directory for the plots
+    data_direc = "./data/Bounded-Rationality/fixed-trust-params/a-priori-alignment/kappa" + str(kappa) + "/wh" + str(wh) # Storage directory for the plots
     #################################################################################################################################
 
     data_all = {}
@@ -250,7 +254,7 @@ def main(args: argparse.Namespace):
     data_all['recommendation'] = np.zeros((num_simulations, num_missions, N), dtype=int)
     data_all['actions'] = np.zeros((num_simulations, num_missions, N), dtype=int)
     data_all['weights'] = np.zeros((num_simulations, num_missions, N, num_weights), dtype=float)
-    data_all['posterior'] = np.zeros((num_simulations, num_missions, N, num_weights), dtype=float)
+    data_all['posterior'] = np.zeros((num_simulations, num_missions, N+1, num_weights), dtype=float)
     data_all['prior threat level'] = np.zeros((num_simulations, num_missions, N), dtype=float)
     data_all['after scan level'] = np.zeros((num_simulations, num_missions, N), dtype=float)
     data_all['threat'] = np.zeros((num_simulations, num_missions, N), dtype=int)
@@ -262,9 +266,8 @@ def main(args: argparse.Namespace):
     data_all['performance actual'] = np.zeros((num_simulations, num_missions, N), dtype=int)
 
     for i in tqdm(range(num_simulations)):
-        data_one_simulation = run_one_simulation(args)
+        data_one_simulation = run_one_simulation(args, i * num_missions)
         for k, v in data_one_simulation.items():
-            # print(k)
             data_all[k][i] = v
     
     ############################### STORING THE DATA #############################
@@ -274,36 +277,6 @@ def main(args: argparse.Namespace):
     data_file = data_direc + '/' + time.strftime("%Y%m%d-%H%M%S") + '.pkl'
     with open(data_file, 'wb') as f:
         pickle.dump(data_all, f)
-
-    ################################ PLOTTING THE DATA ###########################
-
-    # 1. Trust
-    # fig, ax = plt.subplots()
-    # ax.plot(trust_feedback[:, -1], linewidth=2, c='tab:blue', label='Feedback')
-    # ax.plot(trust_estimate[:, -1], linewidth=2, c='tab:orange', label='Estimate')
-    # ax.set_title("End of mission trust", fontsize=16)
-    # ax.set_xlabel("Mission number", fontsize=14)
-    # ax.set_ylabel("Trust", fontsize=14)
-    # ax.set_ylim([-0.05, 1.05])
-    # ax.legend()
-    
-    # if STORE_FIGS:
-    #     fig.savefig(directory + "/trust.png")
-
-    # # 2. Posterior
-    # fig, ax = plt.subplots()
-    # for i in range(num_missions):
-    #     ax.plot(posterior.weights, posterior_dists[i, :], linewidth=2, label=i)
-    
-    # ax.legend()
-    # ax.set_title("Posterior Distribution", fontsize=16)
-    # ax.set_xlabel(r'$w$', fontsize=14)
-    # ax.set_ylabel(r'$P(w)$', fontsize=14)
-    
-    # if STORE_FIGS:
-    #     fig.savefig(directory + "/posterior.png")
-
-    # plt.show()
 
 def col_print(table_data):
     

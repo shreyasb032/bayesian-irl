@@ -15,7 +15,7 @@ import pickle
 import time
 from tqdm import tqdm
 
-def run_one_simulation(args: argparse.Namespace):
+def run_one_simulation(args: argparse.Namespace, seed: int):
 
     # Output data: Trust feedback, trust estimation, posterior distribution, weights, healths, times, recommendations, actions
     data = {}
@@ -68,7 +68,6 @@ def run_one_simulation(args: argparse.Namespace):
     # N stuff
     recs = np.zeros((num_missions, N), dtype=int)
     acts = np.zeros((num_missions, N), dtype=int)
-    posterior_dists = np.zeros((num_missions, N, len(posterior.dist)), dtype=float)
     weights = posterior.weights.copy()
     prior_levels_storage = np.zeros((num_missions, N), dtype=float)
     after_scan_storage = np.zeros((num_missions, N), dtype=float)
@@ -85,6 +84,7 @@ def run_one_simulation(args: argparse.Namespace):
     wh_means = np.zeros((num_missions, N+1), dtype=float)
     wh_map = np.zeros((num_missions, N+1), dtype=float)
     wh_map_prob = np.zeros((num_missions, N+1), dtype=float)
+    posterior_dists = np.zeros((num_missions, N+1, len(posterior.dist)), dtype=float)
 
     # Initialize health and time
     health = 100
@@ -97,11 +97,9 @@ def run_one_simulation(args: argparse.Namespace):
             table_data = [['prior', 'after_scan', 'rec', 'action', 'health', 'time', 'trust-fb', 'trust-est', 'perf-hum', 'perf-rob', 'wh-mean', 'wh-map']]
 
         # Initialize threats
-        # rng = np.random.default_rng(seed=j)
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed=seed+j)
         priors = rng.random(N // region_size)
-        threat_setter = ThreatSetter(N, region_size, priors=priors)
-        # threat_setter = ThreatSetter(N, region_size, priors=priors, seed=j)
+        threat_setter = ThreatSetter(N, region_size, priors=priors, seed=seed+j)
         threat_setter.setThreats()
         priors = threat_setter.priors
         after_scan = threat_setter.after_scan
@@ -112,9 +110,9 @@ def run_one_simulation(args: argparse.Namespace):
         solver.update_danger(threats, prior_levels, after_scan, reset=False)
 
         # Store threat infos
-        prior_levels_storage[j, :] = prior_levels.copy()
-        after_scan_storage[j, :] = after_scan.copy()
-        threats_storage[j, :] = threats.copy()
+        prior_levels_storage[j, :] = prior_levels
+        after_scan_storage[j, :] = after_scan
+        threats_storage[j, :] = threats
 
         # Reset the solver to remove old performance history. But, we would need new parameters
         if RESET_SOLVER:
@@ -156,8 +154,8 @@ def run_one_simulation(args: argparse.Namespace):
             prob, weight = posterior.get_map()
             wh_map[j, i] = weight
             wh_map_prob[j, i] = prob
-            posterior.update(rec, action, human.get_mean(), health_old, time_old, after_scan[i])
             posterior_dists[j, i, :] = posterior.dist
+            posterior.update(rec, action, human.get_mean(), health_old, time_old, after_scan[i])
 
             # Use the old values of health and time to compute the performance
             trust_est_old = solver.get_trust_estimate()
@@ -210,7 +208,8 @@ def run_one_simulation(args: argparse.Namespace):
         prob, weight = posterior.get_map()
         wh_map[j, -1] = weight
         wh_map_prob[j, -1] = prob
-
+        posterior_dists[j, -1, :] = posterior.dist
+    
     data['trust feedback'] = trust_feedback
     data['trust estimate'] = trust_estimate
     data['health'] = healths
@@ -253,7 +252,7 @@ def main(args: argparse.Namespace):
     data_all['recommendation'] = np.zeros((num_simulations, num_missions, N), dtype=int)
     data_all['actions'] = np.zeros((num_simulations, num_missions, N), dtype=int)
     data_all['weights'] = np.zeros((num_simulations, num_missions, N, num_weights), dtype=float)
-    data_all['posterior'] = np.zeros((num_simulations, num_missions, N, num_weights), dtype=float)
+    data_all['posterior'] = np.zeros((num_simulations, num_missions, N+1, num_weights), dtype=float)
     data_all['prior threat level'] = np.zeros((num_simulations, num_missions, N), dtype=float)
     data_all['after scan level'] = np.zeros((num_simulations, num_missions, N), dtype=float)
     data_all['threat'] = np.zeros((num_simulations, num_missions, N), dtype=int)
@@ -265,7 +264,7 @@ def main(args: argparse.Namespace):
     data_all['performance actual'] = np.zeros((num_simulations, num_missions, N), dtype=int)
 
     for i in tqdm(range(num_simulations)):
-        data_one_simulation = run_one_simulation(args)
+        data_one_simulation = run_one_simulation(args,  i * num_missions)
         for k, v in data_one_simulation.items():
             # print(k)
             data_all[k][i] = v

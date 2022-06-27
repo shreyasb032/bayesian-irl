@@ -8,13 +8,14 @@ from classes.HumanModels import BoundedRational
 from classes.IRLModel import Posterior
 from classes.ThreatSetter import ThreatSetter
 from classes.RewardFunctions import Affine
+from classes.ParamsUpdater import Estimator
 import os
 import argparse
 import pickle
 import time
 from tqdm import tqdm
 
-def run_one_simulation(args: argparse.Namespace):
+def run_one_simulation(args: argparse.Namespace, seed: int):
 
     # Output data: Trust feedback, trust estimation, posterior distribution, weights, healths, times, recommendations, actions
     data = {}
@@ -26,7 +27,7 @@ def run_one_simulation(args: argparse.Namespace):
     stepsize = args.posterior_stepsize                    # stepsize in the posterior
     wh_hum = args.health_weight_human           # True health weight of the human. time weight = 1 - health weight
     trust_params = args.trust_params            # Human's true trust parameters in the beta distribution model [alpha_0, beta_0, ws, wf]. These are known by the robot
-    directory = "./figures/Bounded Rationality/fixed-trust-params/non-adaptive-learner/kappa" + str(kappa) + "/" + str(wh_hum) # Storage directory for the plots
+    directory = "./figures/Bounded-Rationality/non-adaptive-learner/kappa" + str(kappa) + "/" + str(wh_hum) # Storage directory for the plots
     N = args.num_sites                          # Number of sites in a mission (Horizon for planning)
     num_missions = args.num_missions            # Number of "missions" of N sites each
     region_size = args.region_size              # Region is a group of houses with a specific value of prior threat probability
@@ -35,11 +36,18 @@ def run_one_simulation(args: argparse.Namespace):
     max_health = 110 # The constant in the affine reward function
     reward_fun = Affine(max_health=max_health)
 
+    # Trust parameter estimator
+    num_iterations = args.num_gradient_steps
+    gradient_stepsize = args.gradient_stepsize
+    err_tol = args.tolerance
+    estimator = Estimator(num_iterations, gradient_stepsize, err_tol)
+
     # Flags for controlling the resets in between missions
     RESET_SOLVER = args.reset_solver
     RESET_HUMAN = args.reset_human
     RESET_HEALTH = args.reset_health
     RESET_TIME = args.reset_time
+    RESET_ESTIMATOR = args.reset_estimator
 
     STORE_FIGS = args.store_figs     # Flag to decide whether to save the trust and posterior plots
     PRINT_FLAG = args.print_flag     # Flag to decide whether to print the data to the console output
@@ -67,7 +75,6 @@ def run_one_simulation(args: argparse.Namespace):
     # N stuff
     recs = np.zeros((num_missions, N), dtype=int)
     acts = np.zeros((num_missions, N), dtype=int)
-    posterior_dists = np.zeros((num_missions, N, len(posterior.dist)), dtype=float)
     weights = posterior.weights.copy()
     prior_levels_storage = np.zeros((num_missions, N), dtype=float)
     after_scan_storage = np.zeros((num_missions, N), dtype=float)
@@ -84,6 +91,7 @@ def run_one_simulation(args: argparse.Namespace):
     wh_means = np.zeros((num_missions, N+1), dtype=float)
     wh_map = np.zeros((num_missions, N+1), dtype=float)
     wh_map_prob = np.zeros((num_missions, N+1), dtype=float)
+    posterior_dists = np.zeros((num_missions, N+1, len(posterior.dist)), dtype=float)
 
     # Initialize health and time
     health = 100
@@ -96,11 +104,9 @@ def run_one_simulation(args: argparse.Namespace):
             table_data = [['prior', 'after_scan', 'rec', 'action', 'health', 'time', 'trust-fb', 'trust-est', 'perf-hum', 'perf-rob', 'wh-mean', 'wh-map']]
 
         # Initialize threats
-        # rng = np.random.default_rng(seed=j)
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed=seed+j)
         priors = rng.random(N // region_size)
-        threat_setter = ThreatSetter(N, region_size, priors=priors)
-        # threat_setter = ThreatSetter(N, region_size, priors=priors, seed=j)
+        threat_setter = ThreatSetter(N, region_size, priors=priors, seed=seed+j)
         threat_setter.setThreats()
         priors = threat_setter.priors
         after_scan = threat_setter.after_scan
@@ -111,9 +117,9 @@ def run_one_simulation(args: argparse.Namespace):
         solver.update_danger(threats, prior_levels, after_scan, reset=False)
 
         # Store threat infos
-        prior_levels_storage[j, :] = prior_levels.copy()
-        after_scan_storage[j, :] = after_scan.copy()
-        threats_storage[j, :] = threats.copy()
+        prior_levels_storage[j, :] = prior_levels
+        after_scan_storage[j, :] = after_scan
+        threats_storage[j, :] = threats
 
         # Reset the solver to remove old performance history. But, we would need new parameters
         if RESET_SOLVER:
@@ -124,6 +130,19 @@ def run_one_simulation(args: argparse.Namespace):
             health = 100
         if RESET_TIME:
             current_time = 0
+        if RESET_ESTIMATOR:
+            estimator.reset()
+
+        # Initialize the trust feedbacks and estimates. This serves as a general starting state of trust for a participant (more like propensity)
+        # This is before any interaction. Serves as a starting point for trust parameters
+        trust_feedback[j, 0] = human.get_feedback()
+
+        # Get an initial guess on the parameters based on this feedback
+        initial_guess = estimator.getInitialGuess(trust_feedback[j, 0])
+
+        # Set the solver's trust params to this initial guess
+        solver.update_params(initial_guess)
+        trust_estimate[j, 0] = solver.get_trust_estimate()
 
         # For each site, get recommendation, choose action, update health, time, trust, posterior
         for i in range(N):
@@ -155,20 +174,23 @@ def run_one_simulation(args: argparse.Namespace):
             prob, weight = posterior.get_map()
             wh_map[j, i] = weight
             wh_map_prob[j, i] = prob
+            posterior_dists[j, :] = posterior.dist
             posterior.update(rec, action, human.get_mean(), health_old, time_old, after_scan[i])
 
             # Use the old values of health and time to compute the performance
-            trust_est_old = solver.get_trust_estimate()
-            trust_estimate[j, i] = trust_est_old
             solver.forward(i, rec, health_old, time_old, posterior)
+            trust_est_after = solver.get_trust_estimate()
+            trust_estimate[j, i+1] = trust_est_after
 
             # Update trust (based on old values of health and time)
-            trust_feedback[j, i] = human.get_feedback()
             human.update_trust(rec, threats[i], health_old, time_old)
+            trust_fb_after = human.get_feedback()
+            trust_feedback[j, i] = trust_fb_after
 
-            ############ TODO: Update trust parameters ###########################
-            parameter_estimates[j, i, :] = np.array(solver.get_trust_params())
-            ######################################################################
+            # Update trust parameters
+            opt_params = estimator.getParams(solver.trust_params, solver.get_last_performance(), trust_fb_after)
+            solver.update_params(opt_params)
+            parameter_estimates[j, i+1, :] = np.array(opt_params)
 
             # Storage
             perf_est[j, i] = solver.get_last_performance()
@@ -183,8 +205,8 @@ def run_one_simulation(args: argparse.Namespace):
                 row.append(str(action))
                 row.append(str(health_old))
                 row.append(str(time_old))
-                row.append("{:.2f}".format(trust_feedback[j, i]))
-                row.append("{:.2f}".format(trust_est_old))
+                row.append("{:.2f}".format(trust_fb_after))
+                row.append("{:.2f}".format(trust_est_after))
                 row.append(str(human.get_last_performance()))
                 row.append(str(solver.get_last_performance()))
                 row.append("{:.2f}".format(posterior.get_mean()))
@@ -200,15 +222,13 @@ def run_one_simulation(args: argparse.Namespace):
             posterior_dists[j, :] = posterior.dist
         
         # Store the final values after the last house
-        trust_feedback[j, -1] = human.get_feedback()
-        trust_estimate[j, -1] = solver.get_trust_estimate()
         healths[j, -1] = health
         times[j, -1] = current_time
-        parameter_estimates[j, -1, :] = np.array(solver.get_trust_params())
         wh_means[j, -1] = posterior.get_mean()
         prob, weight = posterior.get_map()
         wh_map[j, -1] = weight
         wh_map_prob[j, -1] = prob
+        posterior_dists[j, -1, :] = posterior.dist
 
     data['trust feedback'] = trust_feedback
     data['trust estimate'] = trust_estimate
@@ -241,7 +261,7 @@ def main(args: argparse.Namespace):
     num_weights = int(1/stepsize) + 1           # Number of weight samples in the posterior distribution
     wh_hum = args.health_weight_human           # True health weight of the human. time weight = 1 - health weight
     kappa = args.kappa                          # Assumed rationality coefficient in the bounded rationality model
-    data_direc = "./data/Bounded Rationality/fixed-trust-params/non-adaptive-learner/kappa" + str(kappa) + "/wh" + str(wh_hum) # Storage directory for the plots
+    data_direc = "./data/Bounded-Rationality/non-adaptive-learner/kappa" + str(kappa) + "/wh" + str(wh_hum) # Storage directory for the plots
     #################################################################################################################################
 
     data_all = {}
@@ -277,35 +297,6 @@ def main(args: argparse.Namespace):
     with open(data_file, 'wb') as f:
         pickle.dump(data_all, f)
 
-    ################################ PLOTTING THE DATA ###########################
-    # # 1. Trust
-    # fig, ax = plt.subplots()
-    # ax.plot(trust_feedback[:, -1], linewidth=2, c='tab:blue', label='Feedback')
-    # ax.plot(trust_estimate[:, -1], linewidth=2, c='tab:orange', label='Estimate')
-    # ax.set_title("End of mission trust", fontsize=16)
-    # ax.set_xlabel("Mission number", fontsize=14)
-    # ax.set_ylabel("Trust", fontsize=14)
-    # ax.set_ylim([-0.05, 1.05])
-    # ax.legend()
-
-    # if STORE_FIGS:
-    #     fig.savefig(directory + "/trust.png")
-
-    # # 2. Posterior
-    # fig, ax = plt.subplots()
-    # for i in range(num_missions):
-    #     ax.plot(posterior.weights, posterior_dists[i, :], linewidth=2, label=i)
-    
-    # ax.legend()
-    # ax.set_title("Posterior Distribution", fontsize=16)
-    # ax.set_xlabel(r'$w$', fontsize=14)
-    # ax.set_ylabel(r'$P(w)$', fontsize=14)
-    
-    # if STORE_FIGS:
-    #     fig.savefig(directory + "/posterior.png")
-
-    # plt.show()
-
 def col_print(table_data):
     
     string = ""
@@ -334,5 +325,9 @@ if __name__ == "__main__":
     parser.add_argument('--print-flag', type=bool, help="Flag to print the data to output (default: False)", default=False)
     parser.add_argument('--num-simulations', type=int, help='Number of simulations to run (default: 10000)', default=10000)
     parser.add_argument('--posterior-stepsize', type=float, help='Stepsize in the posterior distribution (default(0.05)', default=0.05)
+    parser.add_argument('--num-gradient-steps', type=int, help='Number of iterations of gradient descent for trust parameter estimation (default: 1000)', default=1000)
+    parser.add_argument('--gradient-stepsize', type=float, help='Stepsize for gradient descent (default: 0.0001)', default=0.001)
+    parser.add_argument('--tolerance', type=float, help='Error tolerance for the gradient descent step (default: 0.01)', default=0.01)
+    parser.add_argument('--reset-estimator', type=bool, help="Flag to reset the trust parameter estimator (default: False)", default=False)
 
     main(parser.parse_args())
