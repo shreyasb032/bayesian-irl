@@ -23,7 +23,7 @@ def analyze(data: dict):
 
     num_simulations, num_missions, num_sites = data["actions"].shape
 
-    ########################### TRUST ##################################################
+    ############################## TRUST ##################################################
     fig, ax = plt.subplots()
 
     trust_feedback = data['trust feedback']
@@ -40,7 +40,6 @@ def analyze(data: dict):
 
     ax.legend()
     ax.set_ylim([-0.05, 1.05])
-
 
     ########################################### POSTERIOR ###############################
     fig, ax = plt.subplots()

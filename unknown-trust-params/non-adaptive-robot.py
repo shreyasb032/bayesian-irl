@@ -3,6 +3,7 @@ The weights of the objective function of the robot are fixed.
 Further, the true trust parameters of the human are known a priori. So, they are not updated via feedback"""
 
 import numpy as np
+import _context
 from classes.POMDPSolver import Solver
 from classes.HumanModels import BoundedRational
 from classes.IRLModel import Posterior
@@ -272,7 +273,7 @@ def main(args: argparse.Namespace):
     data_all['recommendation'] = np.zeros((num_simulations, num_missions, N), dtype=int)
     data_all['actions'] = np.zeros((num_simulations, num_missions, N), dtype=int)
     data_all['weights'] = np.zeros((num_simulations, num_missions, N, num_weights), dtype=float)
-    data_all['posterior'] = np.zeros((num_simulations, num_missions, N, num_weights), dtype=float)
+    data_all['posterior'] = np.zeros((num_simulations, num_missions, N+1, num_weights), dtype=float)
     data_all['prior threat level'] = np.zeros((num_simulations, num_missions, N), dtype=float)
     data_all['after scan level'] = np.zeros((num_simulations, num_missions, N), dtype=float)
     data_all['threat'] = np.zeros((num_simulations, num_missions, N), dtype=int)
