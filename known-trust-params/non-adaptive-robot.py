@@ -27,7 +27,7 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
     stepsize = args.posterior_stepsize                    # stepsize in the posterior
     wh_hum = args.health_weight_human           # True health weight of the human. time weight = 1 - health weight
     trust_params = args.trust_params            # Human's true trust parameters in the beta distribution model [alpha_0, beta_0, ws, wf]. These are known by the robot
-    directory = "./figures/Bounded Rationality/non-adaptive-learner/kappa" + str(kappa) + "/" + str(wh_hum) # Storage directory for the plots
+    directory = "./figures/Bounded-Rationality/non-adaptive-learner/kappa" + str(kappa) + "/" + str(wh_hum) # Storage directory for the plots
     N = args.num_sites                          # Number of sites in a mission (Horizon for planning)
     num_missions = args.num_missions            # Number of "missions" of N sites each
     region_size = args.region_size              # Region is a group of houses with a specific value of prior threat probability
@@ -241,7 +241,7 @@ def main(args: argparse.Namespace):
     num_weights = int(1/stepsize) + 1           # Number of weight samples in the posterior distribution
     wh_hum = args.health_weight_human           # True health weight of the human. time weight = 1 - health weight
     kappa = args.kappa                          # Assumed rationality coefficient in the bounded rationality model
-    data_direc = "./data/Bounded Rationality/non-adaptive-learner/kappa" + str(kappa) + "/wh" + str(wh_hum) # Storage directory for the plots
+    data_direc = "./data/Bounded-Rationality/non-adaptive-learner/kappa" + str(kappa) + "/wh" + str(wh_hum) # Storage directory for the plots
     #################################################################################################################################
 
     data_all = {}

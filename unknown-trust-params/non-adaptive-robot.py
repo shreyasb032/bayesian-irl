@@ -186,7 +186,7 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
             # Update trust (based on old values of health and time)
             human.update_trust(rec, threats[i], health_old, time_old)
             trust_fb_after = human.get_feedback()
-            trust_feedback[j, i] = trust_fb_after
+            trust_feedback[j, i+1] = trust_fb_after
 
             # Update trust parameters
             opt_params = estimator.getParams(solver.trust_params, solver.get_last_performance(), trust_fb_after)

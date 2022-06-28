@@ -250,7 +250,7 @@ def main(args: argparse.Namespace):
     num_missions = args.num_missions            # Number of "missions" of N sites each
     stepsize = args.posterior_stepsize          # Stepsize in the posterior distrbution over the weights
     num_weights = int(1/stepsize) + 1           # Number of weight samples in the posterior distribution
-    data_direc = "./data/Bounded Rationality/adaptive-learner/kappa" + str(kappa) + "/wh" + str(wh_hum) # Storage directory for the plots
+    data_direc = "./data/Bounded-Rationality/adaptive-learner/kappa" + str(kappa) + "/wh" + str(wh_hum) # Storage directory for the plots
     #################################################################################################################################
     
     data_all = {}
