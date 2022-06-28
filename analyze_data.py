@@ -133,10 +133,6 @@ def main(args: argparse.Namespace):
 
             input("Press Enter...")
 
-
-
-
-
 if __name__ =="__main__":
 
     parser = argparse.ArgumentParser(description='Exploring the stored simulated data')
