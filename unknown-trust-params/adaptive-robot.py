@@ -179,7 +179,7 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
             prob, weight = posterior.get_map()
             wh_map[j, i] = weight
             wh_map_prob[j, i] = prob
-            posterior_dists[j, :] = posterior.dist
+            posterior_dists[j, i, :] = posterior.dist
             posterior.update(rec, action, human.get_mean(), health_old, time_old, after_scan[i])
 
             # Update the weights of the solver

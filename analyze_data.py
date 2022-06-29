@@ -17,7 +17,6 @@ def plot(fig, ax: plt.Axes, mean, std=None, color=None, title=None, x_label=None
 
     return fig, ax
 
-
 def plot_posterior(fig, ax: plt.Axes, weights, mean, std):
     colors = list(mcolors.TABLEAU_COLORS)
 
