@@ -284,6 +284,8 @@ def main(args: argparse.Namespace):
             data_all[k][i] = v
 
     ############################### STORING THE DATA #############################
+    data_all['args'] = args
+
     if not os.path.exists(data_direc):
         os.makedirs(data_direc)
 

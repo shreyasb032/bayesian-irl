@@ -176,9 +176,7 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
             trust_feedback[j, i] = human.get_feedback()
             human.update_trust(rec, threats[i], health_old, time_old)
 
-            ############ TODO: Update trust parameters ###########################
             parameter_estimates[j, i, :] = np.array(solver.get_trust_params())
-            ######################################################################
 
             # Storage
             perf_est[j, i] = solver.get_last_performance()
@@ -263,6 +261,8 @@ def main(args: argparse.Namespace):
             data_all[k][i] = v
 
     ############################### STORING THE DATA #############################
+    data_all['args'] = args
+
     if not os.path.exists(data_direc):
         os.makedirs(data_direc)
 

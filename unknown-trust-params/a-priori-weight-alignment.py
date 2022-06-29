@@ -145,6 +145,9 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
         # Get an initial guess on the parameters based on this feedback
         initial_guess = estimator.getInitialGuess(trust_feedback[j, 0])
 
+        # TODO: This needs to be done only for the first mission.
+        # TODO: Needs to be handled differently for the rest of the missions
+        # TODO: Either by resetting the performance history, or by changing the trust update rule to discount old performance values
         # Set the solver's trust params to this initial guess
         solver.update_params(initial_guess)
         trust_estimate[j, 0] = solver.get_trust_estimate()
@@ -276,6 +279,9 @@ def main(args: argparse.Namespace):
             data_all[k][i] = v
     
     ############################### STORING THE DATA #############################
+
+    data_all['args'] = args
+
     if not os.path.exists(data_direc):
         os.makedirs(data_direc)
 

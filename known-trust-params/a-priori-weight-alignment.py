@@ -30,11 +30,11 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
     region_size = args.region_size              # Region is a group of houses with a specific value of prior threat probability
 
     # Reward function
-    max_health = 110 # The constant in the affine reward function
+    max_health = 110                            # The constant in the affine reward function
     reward_fun = Affine(max_health=max_health)
 
     # Posterior
-    stepsize = args.posterior_stepsize
+    stepsize = args.posterior_stepsize          # The stepsize in the discrete posterior distribution
 
     # Flags for controlling the resets in between missions
     RESET_SOLVER = args.reset_solver
@@ -76,7 +76,7 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
     threats_storage = np.zeros((num_missions, N), dtype=int)
     perf_actual = np.zeros((num_missions, N), dtype=int)
     perf_est = np.zeros((num_missions, N), dtype=int)
-    
+
     # N+1 stuff
     trust_feedback = np.zeros((num_missions, N+1), dtype=float)
     trust_estimate = np.zeros((num_missions, N+1), dtype=float)
@@ -87,7 +87,7 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
     wh_map = np.zeros((num_missions, N+1), dtype=float)
     wh_map_prob = np.zeros((num_missions, N+1), dtype=float)
     posterior_dists = np.zeros((num_missions, N+1, len(posterior.dist)), dtype=float)
-    
+
     # Initialize health and time
     health = 100
     current_time = 0
@@ -118,12 +118,20 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
         threats_storage[j, :] = threats
 
         # Reset the solver to remove old performance history. But, we would need new parameters
+        # TODO: This is not what I should do here, since I know the true trust parameters of the human
+        # TODO: Forgetting performance history may be paradoxical with knowing the true trust parameters of the human
+        # TODO: Can go back and update the performance history here maybe. But is that feasible?
+        # TODO: Other way is to completely change the trust update model (both for the robot and the simulated human)
+
         if RESET_SOLVER:
             solver.reset(human.get_mean())
+        # Resetting the human makes sense if we are telling them that they are working with different robots for each mission
         if RESET_HUMAN:
             human.reset()
+        # May need to reset health and time between missions. Defaulting to not resetting
         if RESET_HEALTH:
             health = 100
+        # May need to reset health and time between missions. Defaulting to not resetting
         if RESET_TIME:
             current_time = 0
 
@@ -169,9 +177,7 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
             trust_feedback[j, i] = human.get_feedback()
             human.update_trust(rec, threats[i], health_old, time_old)
 
-            ############ TODO: Update trust parameters ###########################
             parameter_estimates[j, i, :] = np.array(solver.get_trust_params())
-            ######################################################################
 
             # Storage
             perf_est[j, i] = solver.get_last_performance()
@@ -255,6 +261,8 @@ def main(args: argparse.Namespace):
             data_all[k][i] = v
     
     ############################### STORING THE DATA #############################
+    data_all['args'] = args
+
     if not os.path.exists(data_direc):
         os.makedirs(data_direc)
 
