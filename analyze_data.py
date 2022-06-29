@@ -148,10 +148,12 @@ def main(args: argparse.Namespace):
         i = 0
         parameter_estimates = reader.data["trust parameter estimates"]
         num_simulations, num_missions, _, _ = parameter_estimates.shape
+
         while i < num_simulations:
             for j in range(num_missions):
                 print(parameter_estimates[i, j, -1, :])
-
+            
+            i += 1
             input("Press Enter...")
 
 if __name__ =="__main__":
