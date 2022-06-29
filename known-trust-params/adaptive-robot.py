@@ -3,6 +3,7 @@ Further, the true trust parameters of the human are known a priori. So, they are
 
 import numpy as np
 import _context
+from classes.Utils import *
 from classes.POMDPSolver import Solver
 from classes.HumanModels import BoundedRational
 from classes.IRLModel import Posterior
@@ -58,10 +59,10 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
     wc_hum = 1-wh_hum
     human_weights = {"health":wh_hum, "time": wc_hum}
     human = BoundedRational(trust_params, human_weights, reward_fun=reward_fun, kappa=1.0)
-    
+
     if STORE_FIGS and not os.path.exists(directory):
         os.makedirs(directory)
-    
+
     # THINGS TO LOOK FOR AND STORE AND PLOT/PRINT
     # Trust, posterior after every interaction, health, time, recommendation, action
     # # Initialize storage
@@ -253,24 +254,7 @@ def main(args: argparse.Namespace):
     data_direc = "./data/Bounded-Rationality/adaptive-learner/kappa" + str(kappa) + "/wh" + str(wh_hum) # Storage directory for the plots
     #################################################################################################################################
     
-    data_all = {}
-    data_all['trust feedback'] = np.zeros((num_simulations, num_missions, N+1), dtype=float)
-    data_all['trust estimate'] = np.zeros((num_simulations, num_missions, N+1), dtype=float)
-    data_all['health'] = np.zeros((num_simulations, num_missions, N+1), dtype=int)
-    data_all['time'] = np.zeros((num_simulations, num_missions, N+1), dtype=int)
-    data_all['recommendation'] = np.zeros((num_simulations, num_missions, N), dtype=int)
-    data_all['actions'] = np.zeros((num_simulations, num_missions, N), dtype=int)
-    data_all['weights'] = np.zeros((num_simulations, num_missions, N, num_weights), dtype=float)
-    data_all['posterior'] = np.zeros((num_simulations, num_missions, N+1, num_weights), dtype=float)
-    data_all['prior threat level'] = np.zeros((num_simulations, num_missions, N), dtype=float)
-    data_all['after scan level'] = np.zeros((num_simulations, num_missions, N), dtype=float)
-    data_all['threat'] = np.zeros((num_simulations, num_missions, N), dtype=int)
-    data_all['trust parameter estimates'] = np.zeros((num_simulations, num_missions, N+1, 4), dtype=float)
-    data_all['mean health weight'] = np.zeros((num_simulations, num_missions, N+1), dtype=float)
-    data_all['map health weight'] = np.zeros((num_simulations, num_missions, N+1), dtype=float)
-    data_all['map health weight probability'] = np.zeros((num_simulations, num_missions, N+1), dtype=float)
-    data_all['performance estimates'] = np.zeros((num_simulations, num_missions, N), dtype=int)
-    data_all['performance actual'] = np.zeros((num_simulations, num_missions, N), dtype=int)
+    data_all = initialize_storage_dict(num_simulations, num_missions, N, num_weights)
 
     for i in tqdm(range(num_simulations)):
         data_one_simulation = run_one_simulation(args, i * num_missions)
@@ -286,35 +270,16 @@ def main(args: argparse.Namespace):
     with open(data_file, 'wb') as f:
         pickle.dump(data_all, f)
 
-def col_print(table_data):
-    
-    string = ""
-    for _ in range(len(table_data[0])):
-        string += "{: ^12}"
-
-    for row in table_data:
-        print(string.format(*row))
-
 if __name__ == "__main__":
 
     parser= argparse.ArgumentParser(description='Adaptive solver that adapts its weights according to learnt human weights')
-    parser.add_argument('--trust-weight', type=float, help='trust weight for the robot (default: 10.0)', default=10.0)
-    parser.add_argument('--kappa', type=float, help='rationality coeffiecient (default: 0.05)', default=0.05)
+
+    # Add args common to all scripts 
+    parser = add_common_args(parser)
+
+    # Add args specific to this script
     parser.add_argument('--health-weight-human', type=float, help='health weight for the human (default: 0.9)', default=0.9)
-    parser.add_argument('--trust-params', nargs=4, help='Trust parameters for the human, default=[90., 30., 20. 30.]', default=[90., 30., 20., 30.])
-    parser.add_argument('--num-sites', type=int, help='Number of sites in a mission (default: 10)', default=10)
-    parser.add_argument('--num-missions', type=int, help='Number of missions (default: 10)', default=10)
-    parser.add_argument('--region-size', type=int, help='Size of a region with a certain probability of threat (default: 1)', default=1)
-    parser.add_argument('--reset-solver', type=bool, help="Flag to reset the solver after each mission (default: False)", default=False)
-    parser.add_argument('--reset-human', type=bool, help="Flag to reset the human after each mission (default: False)", default=False)
-    parser.add_argument('--reset-health', type=bool, help="Flag to reset the health after each mission (default: False)", default=False)
-    parser.add_argument('--reset-time', type=bool, help="Flag to reset the time after each mission (default: False)", default=False)
-    parser.add_argument('--store-figs', type=bool, help="Flag to store the plots (default: False)", default=False)
-    parser.add_argument('--print-flag', type=bool, help="Flag to print the data to output (default: False)", default=False)
-    parser.add_argument('--num-simulations', type=int, help='Number of simulations to run (default: 10000)', default=10000)
-    parser.add_argument('--posterior-stepsize', type=float, help='Stepsize in the posterior distribution (default(0.05)', default=0.05)
 
     args = parser.parse_args()
 
     main(args)
-
