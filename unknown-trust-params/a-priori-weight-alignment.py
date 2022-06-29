@@ -1,5 +1,5 @@
 """Here, the robot's and the human's weights are matched a-priori. The robot does not know these weights and tries to estimate them.
-Further, the true trust parameters of the human are not known. They are updated via gradient descent on receiving feedback"""
+Further, the true trust parameters of the human are not known. They are updated using gradient descent after receiving feedback"""
 
 import numpy as np
 import _context

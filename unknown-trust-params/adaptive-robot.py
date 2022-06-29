@@ -1,5 +1,5 @@
 """Here, the robot tries to estimate the human's weights and uses them as its own weights and for performance computation for the trust update.
-Further, the true trust parameters of the human are known a priori. So, they are not updated via feedback"""
+Further, the true trust parameters of the human are not known. They are not updated usign gradient descent after receiving trust feedback"""
 
 import numpy as np
 import _context
