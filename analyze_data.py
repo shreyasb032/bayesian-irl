@@ -17,14 +17,15 @@ def plot(fig, ax: plt.Axes, mean, std=None, color=None, title=None, x_label=None
 
     return fig, ax
 
-def plot_posterior(fig, ax: plt.Axes, weights, mean, std):
+def plot_posterior(fig, ax: plt.Axes, weights, mean, std,  fill=False):
     colors = list(mcolors.TABLEAU_COLORS)
 
     num_missions = mean.shape[0]
 
     for i in range(num_missions):
         ax.plot(weights, mean[i, :], linewidth=2, label='Mission #{:d}'.format(i+1), c=colors[i])
-        ax.fill_between(weights, mean[i, :]+std[i, :], mean[i, :]-std[i, :], alpha=0.5, color=colors[i])
+        if fill:
+            ax.fill_between(weights, mean[i, :]+std[i, :], mean[i, :]-std[i, :], alpha=0.5, color=colors[i])
     
     ax.legend()
     ax.set_title("Posterior Distribution after each mission", fontsize=16)
@@ -56,6 +57,7 @@ def analyze(data: dict):
 
     ax.legend()
     ax.set_ylim([-0.05, 1.05])
+    ax.grid(True)
 
     ############################ Trust after each site #######################################################
 
@@ -75,6 +77,7 @@ def analyze(data: dict):
 
     ax.legend()
     ax.set_ylim([-0.05, 1.05])
+    ax.grid(True)
 
     ########################################### POSTERIOR ################################################
     fig, ax = plt.subplots()
@@ -87,6 +90,7 @@ def analyze(data: dict):
 
     # mean and std have shape (num_missions, N+1)
     fig, ax = plot_posterior(fig, ax, weights, mean, std)
+    ax.grid(True)
 
     ######################################### Mean weight after each site #################################################
     fig, ax = plt.subplots()
@@ -98,6 +102,7 @@ def analyze(data: dict):
     fig, ax = plot(fig, ax, mean.flatten(), std.flatten(), 'tab:blue', plot_label='mean weight', title="Estimated health weight after each site", x_label='Site index', y_label='Mean health weight')
 
     ax.set_ylim([-0.05, 1.05])
+    ax.grid(True)
 
     ########################################### Mean weight after each mission ############################################
 
@@ -109,6 +114,7 @@ def analyze(data: dict):
 
     fig, ax = plot(fig, ax, mean[:, -1], std[:, -1], 'tab:blue', plot_label='mean weight', title="Estimated health weight after each mission", x_label='Mission index', y_label='Mean health weight')
     ax.set_ylim([-0.05, 1.05])
+    ax.grid(True)
 
     plt.show()
 
