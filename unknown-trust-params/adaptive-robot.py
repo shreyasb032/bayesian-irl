@@ -167,9 +167,6 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
                 if threats[i]:
                     health -= 10
 
-            times[i] = current_time
-            healths[i] = health
-
             # Storage
             recs[j, i] = rec
             acts[j, i] = action
