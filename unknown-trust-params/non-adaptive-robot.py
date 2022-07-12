@@ -139,11 +139,13 @@ def run_one_simulation(args: argparse.Namespace, seed: int):
         # This is before any interaction. Serves as a starting point for trust parameters
         trust_feedback[j, 0] = human.get_feedback()
 
-        # Get an initial guess on the parameters based on this feedback
-        initial_guess = estimator.getInitialGuess(trust_feedback[j, 0])
+        if j == 0:
+            # Get an initial guess on the parameters based on this feedback
+            initial_guess = estimator.getInitialGuess(trust_feedback[j, 0])
 
-        # Set the solver's trust params to this initial guess
-        solver.update_params(initial_guess)
+            # Set the solver's trust params to this initial guess
+            solver.update_params(initial_guess)
+
         trust_estimate[j, 0] = solver.get_trust_estimate()
 
         # For each site, get recommendation, choose action, update health, time, trust, posterior
