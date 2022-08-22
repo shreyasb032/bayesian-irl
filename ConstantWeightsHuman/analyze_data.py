@@ -3,8 +3,9 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from os import path
 
-def plot(fig, ax: plt.Axes, mean, std=None, color=None, title=None, x_label=None, y_label=None, plot_label=None, xlim=None, ylim=None):
+def plot(fig, ax: plt.Axes, mean, std=None, color=None, title=None, x_label=None, y_label=None, plot_label=None):
 
     ax.plot(mean, label=plot_label, c=color, linewidth=2)
 
@@ -43,6 +44,8 @@ def plot_posterior(data: dict, fill: bool = False):
     ax.set_xlabel(r'Health Weight $w_h$', fontsize=14)
     ax.set_ylabel(r'$P(w_h)$', fontsize=14)
     ax.grid(True)
+    
+    return fig
 
 def plot_trust_after_each_site(data: dict):
 
@@ -63,6 +66,8 @@ def plot_trust_after_each_site(data: dict):
     ax.legend()
     ax.set_ylim([-0.05, 1.05])
     ax.grid(True)
+    
+    return fig
 
 def plot_trust_after_each_mission(data: dict):
 
@@ -83,6 +88,8 @@ def plot_trust_after_each_mission(data: dict):
     ax.legend()
     ax.set_ylim([-0.05, 1.05])
 
+    return fig
+
 def plot_mean_weight_after_each_site(data: dict):
     
     fig, ax = plt.subplots()
@@ -94,6 +101,8 @@ def plot_mean_weight_after_each_site(data: dict):
     fig, ax = plot(fig, ax, mean.flatten(), std.flatten(), 'tab:blue', plot_label='mean weight', title="Estimated health weight after each site", x_label='Site index', y_label='Mean health weight')
 
     ax.set_ylim([-0.05, 1.05])
+    
+    return fig
 
 def plot_mean_weight_after_each_mission(data: dict):
 
@@ -104,7 +113,9 @@ def plot_mean_weight_after_each_mission(data: dict):
     std = np.std(wh_means, axis=0)          # Shape (num_missions, N+1)
 
     fig, ax = plot(fig, ax, mean[:, -1], std[:, -1], 'tab:blue', plot_label='mean weight', title="Estimated health weight after each mission", x_label='Mission index', y_label='Mean health weight')
-    ax.set_ylim([-0.05, 1.05])    
+    ax.set_ylim([-0.05, 1.05])
+    
+    return fig
 
 def plot_health_after_each_site(data: dict):
     
@@ -115,6 +126,8 @@ def plot_health_after_each_site(data: dict):
     std = np.std(health, axis=0)          # Shape (num_missions, N+1)
 
     fig, ax = plot(fig, ax, mean.flatten(), std.flatten(), 'tab:blue', plot_label='health', title="Soldier health after each site", x_label='Site index', y_label='Health')
+    
+    return fig
 
 def plot_time_after_each_site(data: dict):
     
@@ -125,44 +138,61 @@ def plot_time_after_each_site(data: dict):
     std = np.std(sim_time, axis=0)          # Shape (num_missions, N+1)
 
     fig, ax = plot(fig, ax, mean.flatten(), std.flatten(), 'tab:blue', plot_label='time', title="Time in simulation after each site", x_label='Site index', y_label='Time')
+    
+    return fig
 
-def analyze(data: dict):
+def analyze(data: dict, dir: str, save_figs: bool):
 
     # Most shapes are (num_simulations, num_missions, num_sites or num_sites+1)
+    
 
     ############################## TRUST At end of mission ##################################################
     
     # plot_trust_after_each_mission(data)
 
     ############################ Trust after each site #######################################################
-    
-    plot_trust_after_each_site(data)
+    fig = plot_trust_after_each_site(data)
+    if save_figs:
+        fig_name = path.join(dir, "trust.png")
+        fig.savefig(fig_name)
 
     ########################################### POSTERIOR ################################################
     
-    plot_posterior(data)
+    fig = plot_posterior(data)
+    if save_figs:
+        fig_name = path.join(dir, "posterior.png")    
+        fig.savefig(fig_name)
 
     ######################################### Mean weight after each site #################################################
     
-    plot_mean_weight_after_each_site(data)
-    
+    fig = plot_mean_weight_after_each_site(data)
+    if save_figs:
+        fig_name = path.join(dir, "wh-mean.png")    
+        fig.savefig(fig_name)
+
     ########################################### Mean weight after each mission ############################################
     
     # plot_mean_weight_after_each_mission(data)
     
     ################################### Health and Time after each site ###################################################
     
-    plot_health_after_each_site(data)
-    plot_time_after_each_site(data)
+    fig = plot_health_after_each_site(data)
+    if save_figs:
+        fig_name = path.join(dir, "health.png")    
+        fig.savefig(fig_name)
 
-    plt.show()
+    fig = plot_time_after_each_site(data)
+    if save_figs:
+        fig_name = path.join(dir, "time.png")    
+        fig.savefig(fig_name)
+
+    # plt.show()
 
     # data['recommendation']
     # data['actions']
     # data['prior threat level']
     # data['after scan level']
     # data['threat'] 
-    # data['trust parameter estimates']
     # data['map health weight']
     # data['map health weight probability']
     # data['performance estimates']
@@ -175,11 +205,15 @@ def main(args: argparse.Namespace):
 
     if filepath is None:
         raise "filepath cannot be none"
+    
+    direc = path.dirname(filepath)
 
     reader = PickleReader(filepath)
     reader.read_data()
+    
+    save_figs = args.save_figs
 
-    analyze(reader.data)
+    analyze(reader.data, direc, save_figs)
 
     if PRINT_TRUST_PARAMS:
         i = 0
@@ -199,6 +233,7 @@ if __name__ =="__main__":
 
     parser.add_argument('--path', required=True, help='Filepath for the data file. No default')
     parser.add_argument('--print-trust-params', help='Flag to control whether to print the trust parameters (default: False)', default=False)
+    parser.add_argument('--save-figs', type=bool, help="Flag to set or unset saving figures (default: False)", default=True)
 
     args = parser.parse_args()
 
